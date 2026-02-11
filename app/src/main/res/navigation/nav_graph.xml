@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/nav_customers">
+
+    <fragment
+        android:id="@+id/nav_customers"
+        android:name="com.tool.smspro.ui.customer.CustomerFragment"
+        android:label="客户管理" />
+
+    <fragment
+        android:id="@+id/nav_groups"
+        android:name="com.tool.smspro.ui.group.GroupFragment"
+        android:label="分组管理" />
+
+    <fragment
+        android:id="@+id/nav_templates"
+        android:name="com.tool.smspro.ui.template.TemplateFragment"
+        android:label="短信模板" />
+
+    <fragment
+        android:id="@+id/nav_send"
+        android:name="com.tool.smspro.ui.send.SendFragment"
+        android:label="群发任务" />
+
+    <fragment
+        android:id="@+id/nav_history"
+        android:name="com.tool.smspro.ui.history.HistoryFragment"
+        android:label="发送记录" />
+
+</navigation>

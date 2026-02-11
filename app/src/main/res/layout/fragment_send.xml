@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <!-- Step Indicators -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:padding="8dp">
+            <TextView android:id="@+id/stepIndicator1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="① 选客户" android:textAlignment="center" android:textStyle="bold" />
+            <TextView android:id="@+id/stepIndicator2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="② 编内容" android:textAlignment="center" android:textStyle="bold" />
+            <TextView android:id="@+id/stepIndicator3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="③ 确认发送" android:textAlignment="center" android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Step 1 -->
+        <LinearLayout android:id="@+id/step1Layout" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="4dp">
+                <Spinner android:id="@+id/sendGroupFilter" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" />
+                <Button android:id="@+id/btnSelectAll" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="全选/取消" style="?attr/materialButtonOutlinedStyle" android:textSize="12sp" />
+            </LinearLayout>
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/customerRecycler" android:layout_width="match_parent" android:layout_height="300dp" android:padding="4dp" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:padding="8dp">
+                <TextView android:id="@+id/selectedCount" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="已选: 0 人" android:textColor="?android:textColorSecondary" />
+                <Button android:id="@+id/btnStep1Next" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="下一步 →" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Step 2 -->
+        <LinearLayout android:id="@+id/step2Layout" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="选择模板" android:textStyle="bold" android:padding="4dp" />
+            <Spinner android:id="@+id/templateSpinner" android:layout_width="match_parent" android:layout_height="48dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="短信内容" android:textStyle="bold" android:padding="4dp" android:layout_marginTop="8dp" />
+            <EditText android:id="@+id/sendContentInput" android:layout_width="match_parent" android:layout_height="120dp" android:gravity="top" android:hint="输入短信内容..." android:inputType="textMultiLine" android:background="@drawable/bg_input" android:padding="12dp" android:importantForAutofill="no" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="4dp">
+                <TextView android:id="@+id/btnVarName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+姓名" android:background="@drawable/bg_chip" android:padding="6dp" android:layout_marginEnd="6dp" android:textSize="12sp" />
+                <TextView android:id="@+id/btnVarCompany" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+公司" android:background="@drawable/bg_chip" android:padding="6dp" android:layout_marginEnd="6dp" android:textSize="12sp" />
+                <TextView android:id="@+id/btnVarAmount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+金额" android:background="@drawable/bg_chip" android:padding="6dp" android:layout_marginEnd="6dp" android:textSize="12sp" />
+                <TextView android:id="@+id/btnVarDate" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+日期" android:background="@drawable/bg_chip" android:padding="6dp" android:textSize="12sp" />
+            </LinearLayout>
+            <TextView android:id="@+id/sendCharCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="0 字" android:textAlignment="textEnd" android:textSize="12sp" android:textColor="?android:textColorSecondary" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="12dp">
+                <Button android:id="@+id/btnStep2Back" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="← 上一步" style="?attr/materialButtonOutlinedStyle" />
+                <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+                <Button android:id="@+id/btnStep2Next" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="下一步 →" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Step 3 -->
+        <LinearLayout android:id="@+id/step3Layout" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:padding="12dp">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+                    <TextView android:id="@+id/confirmTotal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textSize="28sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="总条数" android:textSize="12sp" android:textColor="?android:textColorSecondary" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+                    <TextView android:id="@+id/confirmTime" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0秒" android:textSize="28sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="预计用时" android:textSize="12sp" android:textColor="?android:textColorSecondary" />
+                </LinearLayout>
+            </LinearLayout>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="发送间隔" android:textStyle="bold" android:padding="4dp" />
+            <com.google.android.material.slider.Slider android:id="@+id/intervalSlider" android:layout_width="match_parent" android:layout_height="wrap_content" android:valueFrom="2" android:valueTo="10" android:value="3" android:stepSize="1" />
+            <TextView android:id="@+id/intervalLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="3 秒" android:textAlignment="center" android:textSize="13sp" android:textColor="?android:textColorSecondary" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SIM 卡" android:textStyle="bold" android:padding="4dp" android:layout_marginTop="8dp" />
+            <Spinner android:id="@+id/simSpinner" android:layout_width="match_parent" android:layout_height="48dp" android:entries="@array/sim_options" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="16dp">
+                <Button android:id="@+id/btnStep3Back" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="← 上一步" style="?attr/materialButtonOutlinedStyle" />
+                <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+                <Button android:id="@+id/btnStartSend" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="开始发送" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Sending Progress -->
+        <LinearLayout android:id="@+id/sendingLayout" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" android:padding="8dp">
+            <TextView android:id="@+id/progressText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="0 / 0" android:textStyle="bold" />
+            <ProgressBar android:id="@+id/progressBar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginVertical="8dp" />
+            <ScrollView android:id="@+id/scrollLog" android:layout_width="match_parent" android:layout_height="200dp" android:background="#1D1B20" android:padding="8dp">
+                <TextView android:id="@+id/sendLog" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#E6E1E5" android:fontFamily="monospace" android:textSize="12sp" />
+            </ScrollView>
+            <LinearLayout android:id="@+id/sendControls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center" android:padding="8dp">
+                <Button android:id="@+id/btnPause" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="暂停" style="?attr/materialButtonOutlinedStyle" />
+                <Button android:id="@+id/btnCancel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="取消" android:layout_marginStart="12dp" android:backgroundTint="#B3261E" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Result -->
+        <LinearLayout android:id="@+id/resultLayout" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" android:gravity="center" android:padding="16dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+                    <TextView android:id="@+id/resultSuccess" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textSize="28sp" android:textStyle="bold" android:textColor="#2E7D32" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="成功" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+                    <TextView android:id="@+id/resultFail" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textSize="28sp" android:textStyle="bold" android:textColor="#B3261E" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="失败" />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="16dp">
+                <Button android:id="@+id/btnRetryFailed" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="重发失败" style="?attr/materialButtonOutlinedStyle" android:visibility="gone" />
+                <Button android:id="@+id/btnNewTask" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="新建任务" android:layout_marginStart="12dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

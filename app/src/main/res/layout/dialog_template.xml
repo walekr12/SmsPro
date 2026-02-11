@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="模板标题 *"
+        android:layout_marginBottom="8dp">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/inputTplTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="分类"
+        android:textSize="13sp"
+        android:textColor="?android:textColorSecondary"
+        android:layout_marginBottom="4dp" />
+
+    <Spinner
+        android:id="@+id/spinnerCategory"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginBottom="8dp" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="内容 *"
+        android:layout_marginBottom="4dp">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/inputTplContent"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:gravity="top"
+            android:inputType="textMultiLine" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="4dp">
+        <TextView android:id="@+id/btnVarName" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+姓名" android:background="@drawable/bg_chip" android:padding="6dp" android:layout_marginEnd="6dp" android:textSize="12sp" />
+        <TextView android:id="@+id/btnVarCompany" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+公司" android:background="@drawable/bg_chip" android:padding="6dp" android:layout_marginEnd="6dp" android:textSize="12sp" />
+        <TextView android:id="@+id/btnVarAmount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+金额" android:background="@drawable/bg_chip" android:padding="6dp" android:layout_marginEnd="6dp" android:textSize="12sp" />
+        <TextView android:id="@+id/btnVarDate" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="+日期" android:background="@drawable/bg_chip" android:padding="6dp" android:textSize="12sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvCharCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="0 字"
+        android:textAlignment="textEnd"
+        android:textSize="12sp"
+        android:textColor="?android:textColorSecondary" />
+
+</LinearLayout>

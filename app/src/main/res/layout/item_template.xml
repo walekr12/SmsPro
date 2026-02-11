@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvTplTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvTplCategory"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:background="@drawable/bg_chip"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="3dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvTplContent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="?android:textColorSecondary"
+            android:layout_marginTop="6dp"
+            android:lineSpacingExtra="3dp" />
+
+        <TextView
+            android:id="@+id/tvTplMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="?android:textColorSecondary"
+            android:layout_marginTop="6dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end"
+            android:layout_marginTop="8dp">
+
+            <ImageButton android:id="@+id/btnPin" android:layout_width="36dp" android:layout_height="36dp" android:src="@drawable/ic_pin" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="置顶" android:scaleType="centerInside" />
+            <ImageButton android:id="@+id/btnCopyTpl" android:layout_width="36dp" android:layout_height="36dp" android:src="@drawable/ic_copy" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="复制" android:scaleType="centerInside" />
+            <ImageButton android:id="@+id/btnEditTpl" android:layout_width="36dp" android:layout_height="36dp" android:src="@drawable/ic_edit" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="编辑" android:scaleType="centerInside" />
+            <ImageButton android:id="@+id/btnDeleteTpl" android:layout_width="36dp" android:layout_height="36dp" android:src="@drawable/ic_delete" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="删除" android:scaleType="centerInside" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
