@@ -7,3 +7,14 @@
 -dontwarn org.openxmlformats.**
 -dontwarn org.etsi.**
 -dontwarn org.w3.**
+-dontwarn aQute.bnd.annotation.**
+-dontwarn java.awt.**
+-dontwarn org.osgi.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn org.apache.batik.**
+-dontwarn org.apache.commons.compress.**
+-dontwarn com.graphbuilder.**
+-dontwarn org.slf4j.**
+-dontwarn com.zaxxer.**
+-dontwarn de.rototor.**
+-dontwarn org.apache.commons.io.**
