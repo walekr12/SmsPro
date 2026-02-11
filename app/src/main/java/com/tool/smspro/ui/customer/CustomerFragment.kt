@@ -8,13 +8,11 @@ import android.provider.ContactsContract
 import android.view.*
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
 import com.tool.smspro.App
@@ -38,6 +36,11 @@ class CustomerFragment : Fragment() {
     private var allCustomers: List<Customer> = emptyList()
     private var filterGroupId: Long? = null
     private var searchQuery: String = ""
+
+    // Batch selection
+    private var batchMode = false
+    private val selectedIds = mutableSetOf<Long>()
+    private var currentFilteredList: List<Customer> = emptyList()
 
     private val txtLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { importFromTxt(it) }
@@ -79,6 +82,19 @@ class CustomerFragment : Fragment() {
 
         binding.fab.setOnClickListener { showFabMenu() }
 
+        // Batch bar buttons
+        binding.btnBatchDelete.setOnClickListener { batchDelete() }
+        binding.btnCancelBatch.setOnClickListener { exitBatchMode() }
+        binding.cbSelectAll.setOnCheckedChangeListener { _, checked ->
+            if (checked) {
+                selectedIds.addAll(currentFilteredList.map { it.id })
+            } else {
+                selectedIds.clear()
+            }
+            updateBatchBar()
+            filterAndShow()
+        }
+
         db.customerDao().getAll().observe(viewLifecycleOwner) { customers ->
             allCustomers = customers
             filterAndShow()
@@ -102,11 +118,65 @@ class CustomerFragment : Fragment() {
             val q = searchQuery.lowercase()
             list = list.filter { it.name.lowercase().contains(q) || it.phone.contains(q) }
         }
+        currentFilteredList = list
         binding.emptyView.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
         binding.recyclerView.visibility = if (list.isEmpty()) View.GONE else View.VISIBLE
-        binding.recyclerView.adapter = CustomerAdapter(list, groups, ::showEditDialog, ::deleteCustomer)
+        binding.recyclerView.adapter = CustomerAdapter(
+            list, groups, batchMode, selectedIds,
+            onEdit = ::showEditDialog,
+            onDelete = ::deleteCustomer,
+            onLongClick = ::enterBatchMode,
+            onToggleSelect = ::toggleSelect
+        )
     }
 
+    // ===== Batch Mode =====
+    private fun enterBatchMode(customer: Customer) {
+        if (batchMode) return
+        batchMode = true
+        selectedIds.clear()
+        selectedIds.add(customer.id)
+        binding.batchBar.visibility = View.VISIBLE
+        updateBatchBar()
+        filterAndShow()
+    }
+
+    private fun exitBatchMode() {
+        batchMode = false
+        selectedIds.clear()
+        binding.batchBar.visibility = View.GONE
+        binding.cbSelectAll.isChecked = false
+        filterAndShow()
+    }
+
+    private fun toggleSelect(id: Long, checked: Boolean) {
+        if (checked) selectedIds.add(id) else selectedIds.remove(id)
+        updateBatchBar()
+    }
+
+    private fun updateBatchBar() {
+        binding.tvSelectedCount.text = "已选 ${selectedIds.size} 项"
+    }
+
+    private fun batchDelete() {
+        if (selectedIds.isEmpty()) {
+            Snackbar.make(binding.root, "请先选择要删除的客户", Snackbar.LENGTH_SHORT).show()
+            return
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("批量删除")
+            .setMessage("确定删除已选的 ${selectedIds.size} 位客户？")
+            .setPositiveButton("删除") { _, _ ->
+                lifecycleScope.launch(Dispatchers.IO) {
+                    db.customerDao().deleteByIds(selectedIds.toList())
+                    withContext(Dispatchers.Main) { exitBatchMode() }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    // ===== FAB Menu =====
     private fun showFabMenu() {
         val items = arrayOf("手动添加", "从 TXT 导入", "从 Excel 导入", "从通讯录导入")
         MaterialAlertDialogBuilder(requireContext())
@@ -124,6 +194,7 @@ class CustomerFragment : Fragment() {
             }.show()
     }
 
+    // ===== Edit Dialog =====
     private fun showEditDialog(customer: Customer?) {
         val dialogView = layoutInflater.inflate(R.layout.dialog_customer, null)
         val nameInput = dialogView.findViewById<TextInputEditText>(R.id.inputName)
@@ -135,6 +206,12 @@ class CustomerFragment : Fragment() {
         val groupItems = mutableListOf("未分组")
         groupItems.addAll(groups.map { it.name })
         groupSpinner.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, groupItems)
+
+        // Default to current filter group for new customers
+        if (customer == null && filterGroupId != null) {
+            val idx = groups.indexOfFirst { it.id == filterGroupId }
+            if (idx >= 0) groupSpinner.setSelection(idx + 1)
+        }
 
         customer?.let {
             nameInput.setText(it.name)
@@ -191,7 +268,9 @@ class CustomerFragment : Fragment() {
             .show()
     }
 
+    // ===== Import (auto-assign to current filter group) =====
     private fun importFromTxt(uri: Uri) {
+        val importGroupId = filterGroupId
         lifecycleScope.launch {
             var added = 0; var skipped = 0
             withContext(Dispatchers.IO) {
@@ -208,7 +287,7 @@ class CustomerFragment : Fragment() {
                     }
                     phone = PhoneUtils.normalizePhone(phone)
                     if (PhoneUtils.isValidPhone(phone)) {
-                        customers.add(Customer(name = name, phone = phone, remark = "TXT导入"))
+                        customers.add(Customer(name = name, phone = phone, remark = "TXT导入", groupId = importGroupId))
                         added++
                     } else { skipped++ }
                 }
@@ -220,6 +299,7 @@ class CustomerFragment : Fragment() {
     }
 
     private fun importFromExcel(uri: Uri) {
+        val importGroupId = filterGroupId
         lifecycleScope.launch {
             var added = 0; var skipped = 0
             withContext(Dispatchers.IO) {
@@ -240,7 +320,7 @@ class CustomerFragment : Fragment() {
                         }
                         phone = PhoneUtils.normalizePhone(phone)
                         if (PhoneUtils.isValidPhone(phone)) {
-                            customers.add(Customer(name = name, phone = phone, remark = "Excel导入"))
+                            customers.add(Customer(name = name, phone = phone, remark = "Excel导入", groupId = importGroupId))
                             added++
                         } else { skipped++ }
                     }
@@ -257,6 +337,7 @@ class CustomerFragment : Fragment() {
     }
 
     private fun importFromContact(uri: Uri) {
+        val importGroupId = filterGroupId
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 val cursor = requireContext().contentResolver.query(uri, arrayOf(
@@ -269,7 +350,7 @@ class CustomerFragment : Fragment() {
                         var phone = it.getString(1) ?: ""
                         phone = PhoneUtils.normalizePhone(phone)
                         if (PhoneUtils.isValidPhone(phone)) {
-                            db.customerDao().insert(Customer(name = name, phone = phone, remark = "通讯录导入"))
+                            db.customerDao().insert(Customer(name = name, phone = phone, remark = "通讯录导入", groupId = importGroupId))
                         }
                     }
                 }
@@ -283,17 +364,23 @@ class CustomerFragment : Fragment() {
 class CustomerAdapter(
     private val items: List<Customer>,
     private val groups: List<CustomerGroup>,
+    private val batchMode: Boolean,
+    private val selectedIds: Set<Long>,
     private val onEdit: (Customer) -> Unit,
-    private val onDelete: (Customer) -> Unit
+    private val onDelete: (Customer) -> Unit,
+    private val onLongClick: (Customer) -> Unit,
+    private val onToggleSelect: (Long, Boolean) -> Unit
 ) : RecyclerView.Adapter<CustomerAdapter.VH>() {
 
     inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+        val cbCustomer: CheckBox = view.findViewById(R.id.cbCustomer)
         val tvName: TextView = view.findViewById(R.id.tvName)
         val tvPhone: TextView = view.findViewById(R.id.tvPhone)
         val tvInfo: TextView = view.findViewById(R.id.tvInfo)
         val tvGroup: TextView = view.findViewById(R.id.tvGroup)
         val btnEdit: ImageButton = view.findViewById(R.id.btnEdit)
         val btnDelete: ImageButton = view.findViewById(R.id.btnDelete)
+        val actionButtons: View = view.findViewById(R.id.actionButtons)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -303,6 +390,26 @@ class CustomerAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val c = items[position]
+
+        // Batch mode: show checkbox, hide action buttons
+        holder.cbCustomer.visibility = if (batchMode) View.VISIBLE else View.GONE
+        holder.actionButtons.visibility = if (batchMode) View.GONE else View.VISIBLE
+
+        if (batchMode) {
+            holder.cbCustomer.setOnCheckedChangeListener(null)
+            holder.cbCustomer.isChecked = c.id in selectedIds
+            holder.cbCustomer.setOnCheckedChangeListener { _, checked -> onToggleSelect(c.id, checked) }
+            holder.itemView.setOnClickListener {
+                holder.cbCustomer.isChecked = !holder.cbCustomer.isChecked
+            }
+        } else {
+            holder.itemView.setOnClickListener(null)
+            holder.itemView.setOnLongClickListener {
+                onLongClick(c)
+                true
+            }
+        }
+
         if (c.name.isNotBlank()) {
             holder.tvName.text = c.name
             holder.tvPhone.text = c.phone

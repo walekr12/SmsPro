@@ -4,6 +4,50 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
+    <!-- Batch action bar (hidden by default) -->
+    <LinearLayout
+        android:id="@+id/batchBar"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:background="?attr/colorPrimaryContainer"
+        android:visibility="gone">
+
+        <CheckBox
+            android:id="@+id/cbSelectAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            android:id="@+id/tvSelectedCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="已选 0 项"
+            android:textSize="14sp"
+            android:layout_marginStart="4dp" />
+
+        <Button
+            android:id="@+id/btnBatchDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="批量删除"
+            android:textSize="13sp"
+            android:backgroundTint="#B3261E"
+            android:textColor="#FFFFFF" />
+
+        <Button
+            android:id="@+id/btnCancelBatch"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="取消"
+            android:textSize="13sp"
+            android:layout_marginStart="8dp"
+            style="?attr/materialButtonOutlinedStyle" />
+    </LinearLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

@@ -1,4 +1,4 @@
-name: Build APK
+name: Build & Release APK
 
 on:
   push:
@@ -45,3 +45,15 @@ jobs:
         with:
           name: SmsPro-release
           path: app/build/outputs/apk/release/*.apk
+
+      - name: Auto Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          automatic_release_tag: "v1.0.${{ github.run_number }}"
+          prerelease: false
+          title: "短信管家 Pro v1.0.${{ github.run_number }}"
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
