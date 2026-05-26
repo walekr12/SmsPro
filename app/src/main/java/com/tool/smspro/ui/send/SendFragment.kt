@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.telephony.SubscriptionInfo
+import android.telephony.SubscriptionManager
 import android.view.*
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,10 +41,18 @@ class SendFragment : Fragment() {
     private var allCustomers: List<Customer> = emptyList()
     private var templates: List<SmsTemplate> = emptyList()
     private val selectedIds = mutableSetOf<Long>()
+    private var simOptions: List<SimOption> = listOf(
+        SimOption("系统默认短信卡", SubscriptionManager.INVALID_SUBSCRIPTION_ID, 0)
+    )
 
     private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        setupSimSpinner()
         if (results.all { it.value }) doStartSend()
         else Snackbar.make(binding.root, "需要短信权限才能发送", Snackbar.LENGTH_LONG).show()
+    }
+
+    private val simPermLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        setupSimSpinner()
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -54,6 +64,8 @@ class SendFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         binding.customerRecycler.layoutManager = LinearLayoutManager(requireContext())
         showStep(1)
+        setupSimSpinner()
+        requestPhoneStateForSimList()
 
         db.customerGroupDao().getAll().observe(viewLifecycleOwner) { g ->
             groups = g
@@ -186,10 +198,74 @@ class SendFragment : Fragment() {
         else permLauncher.launch(needed.toTypedArray())
     }
 
+    private fun requestPhoneStateForSimList() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED
+        ) {
+            simPermLauncher.launch(Manifest.permission.READ_PHONE_STATE)
+        }
+    }
+
+    private fun setupSimSpinner() {
+        val defaultSubId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            SubscriptionManager.getDefaultSmsSubscriptionId()
+        } else {
+            SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        }
+
+        val options = mutableListOf(
+            SimOption(
+                "系统默认短信卡${if (defaultSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) " (subId=$defaultSubId)" else ""}",
+                defaultSubId,
+                0
+            )
+        )
+
+        options.addAll(loadActiveSubscriptions().map { sub ->
+            val slot = sub.simSlotIndex + 1
+            val carrier = sub.carrierName?.toString()?.takeIf { it.isNotBlank() } ?: "未知运营商"
+            SimOption("SIM $slot - $carrier (subId=${sub.subscriptionId})", sub.subscriptionId, slot)
+        })
+
+        val previousSubscriptionId = simOptions.getOrNull(binding.simSpinner.selectedItemPosition)?.subscriptionId
+        simOptions = options
+        binding.simSpinner.adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_dropdown_item,
+            options.map { it.label }
+        )
+
+        val selectedIndex = options.indexOfFirst { it.subscriptionId == previousSubscriptionId }
+            .takeIf { it >= 0 }
+            ?: options.indexOfFirst { it.subscriptionId == defaultSubId && it.slot > 0 }
+                .takeIf { it >= 0 }
+            ?: 0
+        binding.simSpinner.setSelection(selectedIndex)
+    }
+
+    private fun loadActiveSubscriptions(): List<SubscriptionInfo> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return emptyList()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED
+        ) return emptyList()
+
+        return try {
+            val sm = requireContext().getSystemService(SubscriptionManager::class.java)
+            @Suppress("MissingPermission")
+            sm.activeSubscriptionInfoList
+                ?.sortedWith(compareBy<SubscriptionInfo> { it.simSlotIndex }.thenBy { it.subscriptionId })
+                ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     private fun doStartSend() {
         val content = binding.sendContentInput.text.toString()
         val interval = binding.intervalSlider.value.toInt()
-        val simCard = binding.simSpinner.selectedItemPosition
+        setupSimSpinner()
+        val simOption = simOptions.getOrNull(binding.simSpinner.selectedItemPosition) ?: simOptions.first()
+        val simCard = simOption.slot
 
         lifecycleScope.launch {
             val customers = withContext(Dispatchers.IO) { db.customerDao().getByIds(selectedIds.toList()) }
@@ -232,6 +308,7 @@ class SendFragment : Fragment() {
                 putExtra(SmsSendService.EXTRA_TASK_ID, taskId)
                 putExtra(SmsSendService.EXTRA_INTERVAL, interval)
                 putExtra(SmsSendService.EXTRA_SIM_CARD, simCard)
+                putExtra(SmsSendService.EXTRA_SUBSCRIPTION_ID, simOption.subscriptionId)
             }
             ContextCompat.startForegroundService(requireContext(), intent)
         }
@@ -270,6 +347,12 @@ class SendFragment : Fragment() {
         _binding = null
     }
 }
+
+private data class SimOption(
+    val label: String,
+    val subscriptionId: Int,
+    val slot: Int
+)
 
 class SelectCustomerAdapter(
     private val items: List<Customer>,

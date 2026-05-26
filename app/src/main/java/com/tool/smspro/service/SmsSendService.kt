@@ -24,6 +24,7 @@ class SmsSendService : Service() {
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_INTERVAL = "interval"
         const val EXTRA_SIM_CARD = "sim_card"
+        const val EXTRA_SUBSCRIPTION_ID = "subscription_id"
         const val ACTION_PAUSE = "com.tool.smspro.PAUSE"
         const val ACTION_RESUME = "com.tool.smspro.RESUME"
         const val ACTION_CANCEL = "com.tool.smspro.CANCEL"
@@ -72,6 +73,10 @@ class SmsSendService : Service() {
         val taskId = intent?.getLongExtra(EXTRA_TASK_ID, -1) ?: -1
         val interval = intent?.getIntExtra(EXTRA_INTERVAL, 3) ?: 3
         val simCard = intent?.getIntExtra(EXTRA_SIM_CARD, 0) ?: 0
+        val subscriptionId = intent?.getIntExtra(
+            EXTRA_SUBSCRIPTION_ID,
+            SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        ) ?: SubscriptionManager.INVALID_SUBSCRIPTION_ID
 
         if (taskId == -1L) { stopSelf(); return START_NOT_STICKY }
 
@@ -85,13 +90,13 @@ class SmsSendService : Service() {
         failCount = 0
 
         scope.launch {
-            sendMessages(taskId, interval, simCard)
+            sendMessages(taskId, interval, simCard, subscriptionId)
         }
 
         return START_STICKY
     }
 
-    private suspend fun sendMessages(taskId: Long, interval: Int, simCard: Int) {
+    private suspend fun sendMessages(taskId: Long, interval: Int, simCard: Int, subscriptionId: Int) {
         val db = (application as App).database
         val records = db.sendRecordDao().getByTaskList(taskId)
         totalCount = records.size
@@ -101,7 +106,7 @@ class SmsSendService : Service() {
             while (isPaused && isRunning) { delay(500) }
             if (!isRunning) break
 
-            val result = sendSingleSms(record.phone, record.content, simCard)
+            val result = sendSingleSms(record.phone, record.content, simCard, subscriptionId)
             val status = if (result.success) "success" else "fail"
             db.sendRecordDao().updateStatus(record.id, status, System.currentTimeMillis())
 
@@ -132,9 +137,14 @@ class SmsSendService : Service() {
         stopSelf()
     }
 
-    private suspend fun sendSingleSms(phone: String, message: String, simCard: Int): SmsSendResult {
+    private suspend fun sendSingleSms(
+        phone: String,
+        message: String,
+        simCard: Int,
+        subscriptionId: Int
+    ): SmsSendResult {
         // 第一次尝试：使用指定的 SIM 卡
-        val firstResult = doSendSms(phone, message, simCard)
+        val firstResult = doSendSms(phone, message, simCard, subscriptionId)
 
         // 如果第一次成功，直接返回
         if (firstResult.success) return firstResult
@@ -160,10 +170,15 @@ class SmsSendService : Service() {
         return firstResult
     }
 
-    private suspend fun doSendSms(phone: String, message: String, simCard: Int): SmsSendResult {
+    private suspend fun doSendSms(
+        phone: String,
+        message: String,
+        simCard: Int,
+        subscriptionId: Int
+    ): SmsSendResult {
         var token: String? = null
         return try {
-            val managerInfo = getSmsManager(simCard)
+            val managerInfo = getSmsManager(simCard, subscriptionId)
             val smsManager = managerInfo.manager
 
             val parts = smsManager.divideMessage(message)
@@ -240,7 +255,7 @@ class SmsSendService : Service() {
         return PendingIntent.getBroadcast(this, "$token-$partIndex".hashCode(), intent, flags)
     }
 
-    private fun getSmsManager(simCard: Int): SmsManagerInfo {
+    private fun getSmsManager(simCard: Int, requestedSubscriptionId: Int): SmsManagerInfo {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
             return SmsManagerInfo(SmsManager.getDefault(), "SIM=默认；Android版本不支持订阅ID")
         }
@@ -250,6 +265,13 @@ class SmsSendService : Service() {
         val activeSubscriptions = if (canReadPhoneState) getActiveSubscriptions() else emptyList()
         val activeDetail = formatActiveSubscriptions(activeSubscriptions)
         val permDetail = "；READ_PHONE_STATE=${if (canReadPhoneState) "已授权" else "未授权"}"
+
+        if (requestedSubscriptionId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            return SmsManagerInfo(
+                SmsManager.getSmsManagerForSubscriptionId(requestedSubscriptionId),
+                "SIM=$simCard；使用界面选择的subscriptionId=$requestedSubscriptionId$activeDetail$permDetail"
+            )
+        }
 
         // ===== 选择"默认" =====
         if (simCard <= 0) {
