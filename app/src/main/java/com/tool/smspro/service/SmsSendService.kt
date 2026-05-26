@@ -179,33 +179,81 @@ class SmsSendService : Service() {
     }
 
     private fun getSmsManager(simCard: Int): SmsManagerInfo {
-        if (simCard <= 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
-            return SmsManagerInfo(SmsManager.getDefault(), "SIM=默认")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
+            return SmsManagerInfo(SmsManager.getDefault(), "SIM=默认；Android 版本不支持订阅 ID")
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED
-        ) {
+        val canReadPhoneState = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+            checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+        val activeSubscriptions = if (canReadPhoneState) getActiveSubscriptions() else emptyList()
+        val activeDetail = formatActiveSubscriptions(activeSubscriptions)
+
+        if (simCard <= 0) {
+            val defaultSubId = SubscriptionManager.getDefaultSmsSubscriptionId()
+            if (defaultSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                return SmsManagerInfo(
+                    SmsManager.getSmsManagerForSubscriptionId(defaultSubId),
+                    "SIM=默认；defaultSmsSubscriptionId=$defaultSubId$activeDetail"
+                )
+            }
+
+            if (activeSubscriptions.size == 1) {
+                val sub = activeSubscriptions.first()
+                return SmsManagerInfo(
+                    SmsManager.getSmsManagerForSubscriptionId(sub.subscriptionId),
+                    "SIM=默认；系统未设置默认短信卡，已使用唯一活跃 SIM(slot=${sub.simSlotIndex + 1}, subscriptionId=${sub.subscriptionId})$activeDetail"
+                )
+            }
+
+            return SmsManagerInfo(
+                SmsManager.getDefault(),
+                "SIM=默认；系统未设置默认短信卡，已回退 SmsManager.getDefault()$activeDetail"
+            )
+        }
+
+        if (!canReadPhoneState) {
             return SmsManagerInfo(SmsManager.getDefault(), "SIM=$simCard；未授予 READ_PHONE_STATE，已回退默认 SIM")
         }
 
-        val subId = getSubscriptionId(simCard)
-        return if (subId != -1) {
-            SmsManagerInfo(SmsManager.getSmsManagerForSubscriptionId(subId), "SIM=$simCard；subscriptionId=$subId")
+        val slotSubscription = activeSubscriptions.firstOrNull { it.simSlotIndex == simCard - 1 }
+        if (slotSubscription != null) {
+            return SmsManagerInfo(
+                SmsManager.getSmsManagerForSubscriptionId(slotSubscription.subscriptionId),
+                "SIM=$simCard；subscriptionId=${slotSubscription.subscriptionId}$activeDetail"
+            )
+        }
+
+        val orderedSubscription = activeSubscriptions.getOrNull(simCard - 1)
+        return if (orderedSubscription != null) {
+            SmsManagerInfo(
+                SmsManager.getSmsManagerForSubscriptionId(orderedSubscription.subscriptionId),
+                "SIM=$simCard；未匹配到卡槽，已按活跃列表第 $simCard 张 SIM 使用 subscriptionId=${orderedSubscription.subscriptionId}$activeDetail"
+            )
         } else {
-            SmsManagerInfo(SmsManager.getDefault(), "SIM=$simCard；未找到可用 subscriptionId，已回退默认 SIM")
+            SmsManagerInfo(
+                SmsManager.getDefault(),
+                "SIM=$simCard；未找到可用 subscriptionId，已回退默认 SIM$activeDetail"
+            )
         }
     }
 
-    private fun getSubscriptionId(simSlot: Int): Int {
+    private fun getActiveSubscriptions(): List<android.telephony.SubscriptionInfo> {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
-                @Suppress("MissingPermission")
-                val list = sm.activeSubscriptionInfoList ?: return -1
-                list.firstOrNull { it.simSlotIndex == simSlot - 1 }?.subscriptionId ?: -1
-            } else -1
-        } catch (e: Exception) { -1 }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED
+            ) return emptyList()
+            val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+            @Suppress("MissingPermission")
+            sm.activeSubscriptionInfoList ?: emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
+
+    private fun formatActiveSubscriptions(activeSubscriptions: List<android.telephony.SubscriptionInfo>): String {
+        if (activeSubscriptions.isEmpty()) return ""
+        val detail = activeSubscriptions.joinToString(",") {
+            "slot=${it.simSlotIndex + 1}/subId=${it.subscriptionId}"
+        }
+        return "；activeSIM=[$detail]"
     }
 
     private fun cancelSending() {
