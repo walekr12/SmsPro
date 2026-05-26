@@ -232,6 +232,16 @@ class SendFragment : Fragment() {
         })
 
         if (options.isEmpty()) {
+            val telecomSlot = findTelecomSlotFromSystemProperties()
+            val telecomSubId = getSubscriptionIdForSlot(telecomSlot)
+            if (telecomSlot >= 0 && telecomSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                options.add(
+                    SimOption("电信卡 - SIM ${telecomSlot + 1} (subId=$telecomSubId)", telecomSubId, telecomSlot + 1)
+                )
+            }
+        }
+
+        if (options.isEmpty()) {
             options.add(
                 SimOption(
                     "未读取到SIM卡${if (defaultSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) "；系统默认subId=$defaultSubId" else ""}",
@@ -280,6 +290,37 @@ class SendFragment : Fragment() {
                 ?: emptyList()
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    private fun findTelecomSlotFromSystemProperties(): Int {
+        val numeric = readSystemProperty("gsm.sim.operator.numeric")
+            .ifBlank { readSystemProperty("gsm.operator.numeric") }
+        return numeric.split(",")
+            .map { it.trim() }
+            .indexOfFirst { it in setOf("46003", "46005", "46011", "46012") }
+    }
+
+    private fun getSubscriptionIdForSlot(slotIndex: Int): Int {
+        if (slotIndex < 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        }
+        return try {
+            val sm = requireContext().getSystemService(SubscriptionManager::class.java)
+            @Suppress("MissingPermission")
+            sm.getSubscriptionIds(slotIndex)?.firstOrNull() ?: SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        } catch (e: Exception) {
+            SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        }
+    }
+
+    private fun readSystemProperty(name: String): String {
+        return try {
+            Runtime.getRuntime().exec(arrayOf("getprop", name)).inputStream
+                .bufferedReader()
+                .use { it.readText().trim() }
+        } catch (e: Exception) {
+            ""
         }
     }
 

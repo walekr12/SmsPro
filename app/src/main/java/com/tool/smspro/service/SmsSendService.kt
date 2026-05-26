@@ -281,6 +281,15 @@ class SmsSendService : Service() {
             )
         }
 
+        val telecomSlot = findTelecomSlotFromSystemProperties()
+        val telecomSubId = getSubscriptionIdForSlot(telecomSlot)
+        if (telecomSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            return SmsManagerInfo(
+                SmsManager.getSmsManagerForSubscriptionId(telecomSubId),
+                "SIM=$simCard；通过系统属性识别电信卡slot=${telecomSlot + 1}，subscriptionId=$telecomSubId$activeDetail$permDetail"
+            )
+        }
+
         // ===== 选择"默认" =====
         if (simCard <= 0) {
             val defaultSubId = SubscriptionManager.getDefaultSmsSubscriptionId()
@@ -392,6 +401,37 @@ class SmsSendService : Service() {
             "%03d%02d".format(mcc, mnc)
         }
         return mccMnc in setOf("46003", "46005", "46011", "46012")
+    }
+
+    private fun findTelecomSlotFromSystemProperties(): Int {
+        val numeric = readSystemProperty("gsm.sim.operator.numeric")
+            .ifBlank { readSystemProperty("gsm.operator.numeric") }
+        return numeric.split(",")
+            .map { it.trim() }
+            .indexOfFirst { it in setOf("46003", "46005", "46011", "46012") }
+    }
+
+    private fun getSubscriptionIdForSlot(slotIndex: Int): Int {
+        if (slotIndex < 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        }
+        return try {
+            val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+            @Suppress("MissingPermission")
+            sm.getSubscriptionIds(slotIndex)?.firstOrNull() ?: SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        } catch (e: Exception) {
+            SubscriptionManager.INVALID_SUBSCRIPTION_ID
+        }
+    }
+
+    private fun readSystemProperty(name: String): String {
+        return try {
+            Runtime.getRuntime().exec(arrayOf("getprop", name)).inputStream
+                .bufferedReader()
+                .use { it.readText().trim() }
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     private fun cancelSending() {
