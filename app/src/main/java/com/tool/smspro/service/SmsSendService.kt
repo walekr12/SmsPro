@@ -203,7 +203,7 @@ class SmsSendService : Service() {
                 val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
                 @Suppress("MissingPermission")
                 val list = sm.activeSubscriptionInfoList ?: return -1
-                if (simSlot <= list.size) list[simSlot - 1].subscriptionId else -1
+                list.firstOrNull { it.simSlotIndex == simSlot - 1 }?.subscriptionId ?: -1
             } else -1
         } catch (e: Exception) { -1 }
     }
@@ -312,6 +312,12 @@ private fun describeResultCode(resultCode: Int): String {
         SmsManager.RESULT_ERROR_NO_SERVICE -> "RESULT_ERROR_NO_SERVICE(无服务)"
         SmsManager.RESULT_ERROR_NULL_PDU -> "RESULT_ERROR_NULL_PDU"
         SmsManager.RESULT_ERROR_RADIO_OFF -> "RESULT_ERROR_RADIO_OFF(飞行模式/无线电关闭)"
+        SmsManager.RESULT_MODEM_ERROR -> "RESULT_MODEM_ERROR(调制解调器发送失败)"
+        SmsManager.RESULT_NETWORK_ERROR -> "RESULT_NETWORK_ERROR(网络发送失败)"
+        SmsManager.RESULT_NETWORK_REJECT -> "RESULT_NETWORK_REJECT(网络拒绝)"
+        SmsManager.RESULT_INVALID_STATE -> "RESULT_INVALID_STATE(短信模块状态异常)"
+        SmsManager.RESULT_INVALID_ARGUMENTS -> "RESULT_INVALID_ARGUMENTS(短信参数异常)"
+        SmsManager.RESULT_OPERATION_NOT_ALLOWED -> "RESULT_OPERATION_NOT_ALLOWED(系统不允许发送)"
         else -> "resultCode=$resultCode"
     }
 }
