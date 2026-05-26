@@ -42,7 +42,7 @@ class SendFragment : Fragment() {
     private var templates: List<SmsTemplate> = emptyList()
     private val selectedIds = mutableSetOf<Long>()
     private var simOptions: List<SimOption> = listOf(
-        SimOption("系统默认短信卡", SubscriptionManager.INVALID_SUBSCRIPTION_ID, 0)
+        SimOption("未读取到SIM卡，请授予读取手机状态权限", SubscriptionManager.INVALID_SUBSCRIPTION_ID, 0)
     )
 
     private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
@@ -213,19 +213,37 @@ class SendFragment : Fragment() {
             SubscriptionManager.INVALID_SUBSCRIPTION_ID
         }
 
-        val options = mutableListOf(
-            SimOption(
-                "系统默认短信卡${if (defaultSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) " (subId=$defaultSubId)" else ""}",
-                defaultSubId,
-                0
-            )
-        )
+        val subscriptions = loadActiveSubscriptions()
+        val options = mutableListOf<SimOption>()
+        val telecomSub = subscriptions.firstOrNull { it.isChinaTelecom() }
 
-        options.addAll(loadActiveSubscriptions().map { sub ->
+        if (telecomSub != null) {
+            val slot = telecomSub.simSlotIndex + 1
+            val carrier = telecomSub.displayCarrier()
+            options.add(
+                SimOption("电信卡 - SIM $slot - $carrier (subId=${telecomSub.subscriptionId})", telecomSub.subscriptionId, slot)
+            )
+        }
+
+        options.addAll(subscriptions.map { sub ->
             val slot = sub.simSlotIndex + 1
-            val carrier = sub.carrierName?.toString()?.takeIf { it.isNotBlank() } ?: "未知运营商"
+            val carrier = sub.displayCarrier()
             SimOption("SIM $slot - $carrier (subId=${sub.subscriptionId})", sub.subscriptionId, slot)
         })
+
+        if (options.isEmpty()) {
+            options.add(
+                SimOption(
+                    "未读取到SIM卡${if (defaultSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) "；系统默认subId=$defaultSubId" else ""}",
+                    defaultSubId,
+                    0
+                )
+            )
+        } else if (defaultSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID &&
+            options.none { it.subscriptionId == defaultSubId }
+        ) {
+            options.add(SimOption("系统默认短信卡 (subId=$defaultSubId)", defaultSubId, 0))
+        }
 
         val previousSubscriptionId = simOptions.getOrNull(binding.simSpinner.selectedItemPosition)?.subscriptionId
         simOptions = options
@@ -237,7 +255,7 @@ class SendFragment : Fragment() {
 
         val selectedIndex = options.indexOfFirst { it.subscriptionId == previousSubscriptionId }
             .takeIf { it >= 0 }
-            ?: options.indexOfFirst { it.subscriptionId == defaultSubId && it.slot > 0 }
+            ?: options.indexOfFirst { it.subscriptionId == telecomSub?.subscriptionId }
                 .takeIf { it >= 0 }
             ?: 0
         binding.simSpinner.setSelection(selectedIndex)
@@ -252,7 +270,12 @@ class SendFragment : Fragment() {
         return try {
             val sm = requireContext().getSystemService(SubscriptionManager::class.java)
             @Suppress("MissingPermission")
-            sm.activeSubscriptionInfoList
+            val list = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                sm.completeActiveSubscriptionInfoList
+            } else {
+                sm.activeSubscriptionInfoList
+            }
+            list
                 ?.sortedWith(compareBy<SubscriptionInfo> { it.simSlotIndex }.thenBy { it.subscriptionId })
                 ?: emptyList()
         } catch (e: Exception) {
@@ -353,6 +376,23 @@ private data class SimOption(
     val subscriptionId: Int,
     val slot: Int
 )
+
+private fun SubscriptionInfo.displayCarrier(): String {
+    return carrierName?.toString()?.takeIf { it.isNotBlank() } ?: "未知运营商"
+}
+
+private fun SubscriptionInfo.isChinaTelecom(): Boolean {
+    val carrier = displayCarrier().lowercase()
+    if (carrier.contains("电信") || carrier.contains("telecom") || carrier.contains("ctcc")) return true
+
+    val mccMnc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        "${mccString.orEmpty()}${mncString.orEmpty()}"
+    } else {
+        @Suppress("DEPRECATION")
+        "%03d%02d".format(mcc, mnc)
+    }
+    return mccMnc in setOf("46003", "46005", "46011", "46012")
+}
 
 class SelectCustomerAdapter(
     private val items: List<Customer>,

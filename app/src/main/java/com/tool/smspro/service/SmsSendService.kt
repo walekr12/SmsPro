@@ -265,11 +265,19 @@ class SmsSendService : Service() {
         val activeSubscriptions = if (canReadPhoneState) getActiveSubscriptions() else emptyList()
         val activeDetail = formatActiveSubscriptions(activeSubscriptions)
         val permDetail = "；READ_PHONE_STATE=${if (canReadPhoneState) "已授权" else "未授权"}"
+        val telecomSubscription = activeSubscriptions.firstOrNull { it.isChinaTelecom() }
 
         if (requestedSubscriptionId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
             return SmsManagerInfo(
                 SmsManager.getSmsManagerForSubscriptionId(requestedSubscriptionId),
                 "SIM=$simCard；使用界面选择的subscriptionId=$requestedSubscriptionId$activeDetail$permDetail"
+            )
+        }
+
+        if (telecomSubscription != null) {
+            return SmsManagerInfo(
+                SmsManager.getSmsManagerForSubscriptionId(telecomSubscription.subscriptionId),
+                "SIM=$simCard；自动选择电信卡subscriptionId=${telecomSubscription.subscriptionId}(slot=${telecomSubscription.simSlotIndex + 1})$activeDetail$permDetail"
             )
         }
 
@@ -356,7 +364,11 @@ class SmsSendService : Service() {
             ) return emptyList()
             val sm = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
             @Suppress("MissingPermission")
-            sm.activeSubscriptionInfoList ?: emptyList()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                sm.completeActiveSubscriptionInfoList ?: emptyList()
+            } else {
+                sm.activeSubscriptionInfoList ?: emptyList()
+            }
         } catch (e: Exception) { emptyList() }
     }
 
@@ -367,6 +379,19 @@ class SmsSendService : Service() {
             "slot=${sub.simSlotIndex + 1}/subId=${sub.subscriptionId}/$carrier"
         }
         return "；activeSIM=[$detail]"
+    }
+
+    private fun android.telephony.SubscriptionInfo.isChinaTelecom(): Boolean {
+        val carrier = (carrierName?.toString() ?: "").lowercase()
+        if (carrier.contains("电信") || carrier.contains("telecom") || carrier.contains("ctcc")) return true
+
+        val mccMnc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "${mccString.orEmpty()}${mncString.orEmpty()}"
+        } else {
+            @Suppress("DEPRECATION")
+            "%03d%02d".format(mcc, mnc)
+        }
+        return mccMnc in setOf("46003", "46005", "46011", "46012")
     }
 
     private fun cancelSending() {
