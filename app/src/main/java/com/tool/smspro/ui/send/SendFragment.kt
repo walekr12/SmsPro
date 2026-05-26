@@ -221,25 +221,20 @@ class SendFragment : Fragment() {
             val slot = telecomSub.simSlotIndex + 1
             val carrier = telecomSub.displayCarrier()
             options.add(
-                SimOption("电信卡 - SIM $slot - $carrier (subId=${telecomSub.subscriptionId})", telecomSub.subscriptionId, slot)
+                SimOption("电信卡 - SIM $slot - $carrier (subId=${telecomSub.subscriptionId})", telecomSub.subscriptionId, slot, true)
             )
         }
 
-        options.addAll(subscriptions.map { sub ->
+        options.addAll(subscriptions.filter { it.subscriptionId != telecomSub?.subscriptionId }.map { sub ->
             val slot = sub.simSlotIndex + 1
             val carrier = sub.displayCarrier()
-            SimOption("SIM $slot - $carrier (subId=${sub.subscriptionId})", sub.subscriptionId, slot)
+            SimOption("SIM $slot - $carrier (subId=${sub.subscriptionId})", sub.subscriptionId, slot, sub.isChinaTelecom())
         })
 
-        if (options.isEmpty()) {
-            val telecomSlot = findTelecomSlotFromSystemProperties()
-            val telecomSubId = getSubscriptionIdForSlot(telecomSlot)
-            if (telecomSlot >= 0 && telecomSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-                options.add(
-                    SimOption("电信卡 - SIM ${telecomSlot + 1} (subId=$telecomSubId)", telecomSubId, telecomSlot + 1)
-                )
-            }
-        }
+        val fallbackOptions = loadSystemPropertySimOptions()
+        options.addAll(fallbackOptions.filter { fallback ->
+            options.none { it.subscriptionId == fallback.subscriptionId || it.slot == fallback.slot }
+        })
 
         if (options.isEmpty()) {
             options.add(
@@ -265,6 +260,8 @@ class SendFragment : Fragment() {
 
         val selectedIndex = options.indexOfFirst { it.subscriptionId == previousSubscriptionId }
             .takeIf { it >= 0 }
+            ?: options.indexOfFirst { it.isTelecom }
+                .takeIf { it >= 0 }
             ?: options.indexOfFirst { it.subscriptionId == telecomSub?.subscriptionId }
                 .takeIf { it >= 0 }
             ?: 0
@@ -299,6 +296,40 @@ class SendFragment : Fragment() {
         return numeric.split(",")
             .map { it.trim() }
             .indexOfFirst { it in setOf("46003", "46005", "46011", "46012") }
+    }
+
+    private fun loadSystemPropertySimOptions(): List<SimOption> {
+        val numeric = readSystemProperty("gsm.sim.operator.numeric")
+            .ifBlank { readSystemProperty("gsm.operator.numeric") }
+        val names = readSystemProperty("gsm.sim.operator.alpha")
+            .ifBlank { readSystemProperty("gsm.operator.alpha") }
+            .split(",")
+            .map { it.trim() }
+
+        return numeric.split(",")
+            .map { it.trim() }
+            .mapIndexedNotNull { slotIndex, mccMnc ->
+                if (mccMnc.isBlank()) return@mapIndexedNotNull null
+                val subId = getSubscriptionIdForSlot(slotIndex)
+                if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) return@mapIndexedNotNull null
+
+                val slot = slotIndex + 1
+                val isTelecom = mccMnc in setOf("46003", "46005", "46011", "46012")
+                val carrier = names.getOrNull(slotIndex)
+                    ?.takeIf { it.isNotBlank() }
+                    ?: carrierNameFromMccMnc(mccMnc)
+                val labelPrefix = if (isTelecom) "电信卡 - " else ""
+                SimOption("$labelPrefix SIM $slot - $carrier ($mccMnc, subId=$subId)", subId, slot, isTelecom)
+            }
+    }
+
+    private fun carrierNameFromMccMnc(mccMnc: String): String {
+        return when (mccMnc) {
+            "46003", "46005", "46011", "46012" -> "中国电信"
+            "46000", "46002", "46004", "46007", "46008" -> "中国移动"
+            "46001", "46006", "46009" -> "中国联通"
+            else -> "未知运营商"
+        }
     }
 
     private fun getSubscriptionIdForSlot(slotIndex: Int): Int {
@@ -415,7 +446,8 @@ class SendFragment : Fragment() {
 private data class SimOption(
     val label: String,
     val subscriptionId: Int,
-    val slot: Int
+    val slot: Int,
+    val isTelecom: Boolean = false
 )
 
 private fun SubscriptionInfo.displayCarrier(): String {
