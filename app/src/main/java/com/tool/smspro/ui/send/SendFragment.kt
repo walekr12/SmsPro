@@ -180,6 +180,7 @@ class SendFragment : Fragment() {
 
     private fun requestPermAndSend() {
         val perms = mutableListOf(Manifest.permission.SEND_SMS)
+        if (binding.simSpinner.selectedItemPosition > 0) perms.add(Manifest.permission.READ_PHONE_STATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) perms.add(Manifest.permission.POST_NOTIFICATIONS)
         val needed = perms.filter { ContextCompat.checkSelfPermission(requireContext(), it) != PackageManager.PERMISSION_GRANTED }
         if (needed.isEmpty()) doStartSend()

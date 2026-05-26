@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 
 class SmsSentReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context?, intent: Intent?) {}
+    override fun onReceive(context: Context?, intent: Intent?) {
+        SmsSendService.handleSentResult(intent, resultCode)
+    }
 }
 
 class SmsDeliveredReceiver : BroadcastReceiver() {

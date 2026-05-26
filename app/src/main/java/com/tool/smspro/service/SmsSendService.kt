@@ -3,6 +3,7 @@ package com.tool.smspro.service
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -12,9 +13,8 @@ import androidx.core.app.NotificationCompat
 import com.tool.smspro.App
 import com.tool.smspro.MainActivity
 import com.tool.smspro.R
-import com.tool.smspro.data.entity.SendRecord
-import com.tool.smspro.util.TemplateUtils
 import kotlinx.coroutines.*
+import java.util.concurrent.ConcurrentHashMap
 
 class SmsSendService : Service() {
 
@@ -27,6 +27,10 @@ class SmsSendService : Service() {
         const val ACTION_PAUSE = "com.tool.smspro.PAUSE"
         const val ACTION_RESUME = "com.tool.smspro.RESUME"
         const val ACTION_CANCEL = "com.tool.smspro.CANCEL"
+        const val ACTION_SMS_SENT = "com.tool.smspro.SMS_SENT"
+        const val EXTRA_SMS_TOKEN = "sms_token"
+        const val EXTRA_PART_INDEX = "part_index"
+        const val EXTRA_PART_COUNT = "part_count"
 
         var isRunning = false
         var isPaused = false
@@ -36,6 +40,15 @@ class SmsSendService : Service() {
         var failCount = 0
         var onProgressUpdate: ((Int, Int, Int, Int, String) -> Unit)? = null
         var onComplete: ((Int, Int) -> Unit)? = null
+
+        private val sentCallbacks = ConcurrentHashMap<String, SmsSentAccumulator>()
+
+        fun handleSentResult(intent: Intent?, resultCode: Int) {
+            val token = intent?.getStringExtra(EXTRA_SMS_TOKEN) ?: return
+            val partIndex = intent.getIntExtra(EXTRA_PART_INDEX, 0)
+            val errorCode = intent.getIntExtra("errorCode", Int.MIN_VALUE)
+            sentCallbacks[token]?.addResult(partIndex, resultCode, errorCode)
+        }
     }
 
     private val job = SupervisorJob()
@@ -88,14 +101,14 @@ class SmsSendService : Service() {
             while (isPaused && isRunning) { delay(500) }
             if (!isRunning) break
 
-            val success = sendSingleSms(record.phone, record.content, simCard)
-            val status = if (success) "success" else "fail"
+            val result = sendSingleSms(record.phone, record.content, simCard)
+            val status = if (result.success) "success" else "fail"
             db.sendRecordDao().updateStatus(record.id, status, System.currentTimeMillis())
 
-            if (success) successCount++ else failCount++
+            if (result.success) successCount++ else failCount++
             currentProgress = index + 1
 
-            val logMsg = "[${currentProgress}/${totalCount}] ${record.phone} - ${if (success) "发送成功" else "发送失败"}"
+            val logMsg = "[${currentProgress}/${totalCount}] ${record.phone} - ${if (result.success) "发送成功" else "发送失败"}；${result.detail}"
             withContext(Dispatchers.Main) {
                 onProgressUpdate?.invoke(currentProgress, totalCount, successCount, failCount, logMsg)
             }
@@ -119,26 +132,68 @@ class SmsSendService : Service() {
         stopSelf()
     }
 
-    private fun sendSingleSms(phone: String, message: String, simCard: Int): Boolean {
+    private suspend fun sendSingleSms(phone: String, message: String, simCard: Int): SmsSendResult {
+        var token: String? = null
         return try {
-            val smsManager = if (simCard > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                val subId = getSubscriptionId(simCard)
-                if (subId != -1) SmsManager.getSmsManagerForSubscriptionId(subId)
-                else SmsManager.getDefault()
-            } else {
-                SmsManager.getDefault()
-            }
+            val managerInfo = getSmsManager(simCard)
+            val smsManager = managerInfo.manager
 
             val parts = smsManager.divideMessage(message)
-            if (parts.size > 1) {
-                smsManager.sendMultipartTextMessage(phone, null, parts, null, null)
-            } else {
-                smsManager.sendTextMessage(phone, null, message, null, null)
+            token = "${System.currentTimeMillis()}-${System.nanoTime()}-$phone"
+            val accumulator = SmsSentAccumulator(parts.size)
+            sentCallbacks[token] = accumulator
+            val sentIntents = ArrayList<PendingIntent>(parts.size).apply {
+                parts.indices.forEach { index ->
+                    add(createSentPendingIntent(token, index, parts.size))
+                }
             }
-            true
+
+            if (parts.size > 1) {
+                smsManager.sendMultipartTextMessage(phone, null, parts, sentIntents, null)
+            } else {
+                smsManager.sendTextMessage(phone, null, message, sentIntents.first(), null)
+            }
+
+            val sentResult = withTimeoutOrNull(120_000L) { accumulator.await() }
+                ?: SmsSendResult(false, "等待系统发送回执超时；parts=${parts.size}；${managerInfo.detail}")
+
+            sentResult.copy(detail = "${sentResult.detail}；parts=${parts.size}；${managerInfo.detail}")
         } catch (e: Exception) {
             e.printStackTrace()
-            false
+            SmsSendResult(false, "调用 SmsManager 异常：${e.javaClass.simpleName}: ${e.message ?: "无详细信息"}")
+        } finally {
+            token?.let { sentCallbacks.remove(it) }
+        }
+    }
+
+    private fun createSentPendingIntent(token: String, partIndex: Int, partCount: Int): PendingIntent {
+        val intent = Intent(this, SmsSentReceiver::class.java).apply {
+            action = ACTION_SMS_SENT
+            putExtra(EXTRA_SMS_TOKEN, token)
+            putExtra(EXTRA_PART_INDEX, partIndex)
+            putExtra(EXTRA_PART_COUNT, partCount)
+        }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+        return PendingIntent.getBroadcast(this, "$token-$partIndex".hashCode(), intent, flags)
+    }
+
+    private fun getSmsManager(simCard: Int): SmsManagerInfo {
+        if (simCard <= 0 || Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) {
+            return SmsManagerInfo(SmsManager.getDefault(), "SIM=默认")
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return SmsManagerInfo(SmsManager.getDefault(), "SIM=$simCard；未授予 READ_PHONE_STATE，已回退默认 SIM")
+        }
+
+        val subId = getSubscriptionId(simCard)
+        return if (subId != -1) {
+            SmsManagerInfo(SmsManager.getSmsManagerForSubscriptionId(subId), "SIM=$simCard；subscriptionId=$subId")
+        } else {
+            SmsManagerInfo(SmsManager.getDefault(), "SIM=$simCard；未找到可用 subscriptionId，已回退默认 SIM")
         }
     }
 
@@ -207,5 +262,56 @@ class SmsSendService : Service() {
         isRunning = false
         job.cancel()
         releaseWakeLock()
+    }
+}
+
+data class SmsSendResult(
+    val success: Boolean,
+    val detail: String
+)
+
+private data class SmsManagerInfo(
+    val manager: SmsManager,
+    val detail: String
+)
+
+private class SmsSentAccumulator(private val partCount: Int) {
+    private val deferred = CompletableDeferred<SmsSendResult>()
+    private val results = mutableMapOf<Int, PartResult>()
+
+    @Synchronized
+    fun addResult(partIndex: Int, resultCode: Int, errorCode: Int) {
+        if (deferred.isCompleted) return
+        results[partIndex] = PartResult(resultCode, errorCode)
+        if (results.size < partCount) return
+
+        val failed = results.toSortedMap().filterValues { it.resultCode != Activity.RESULT_OK }
+        if (failed.isEmpty()) {
+            deferred.complete(SmsSendResult(true, "系统回执 OK"))
+        } else {
+            val detail = failed.entries.joinToString("；") { (index, result) ->
+                "part ${index + 1}: ${describeResultCode(result.resultCode)}${describeErrorCode(result.errorCode)}"
+            }
+            deferred.complete(SmsSendResult(false, detail))
+        }
+    }
+
+    suspend fun await(): SmsSendResult = deferred.await()
+
+    private data class PartResult(val resultCode: Int, val errorCode: Int)
+
+    private fun describeErrorCode(errorCode: Int): String {
+        return if (errorCode == Int.MIN_VALUE) "" else "，运营商错误码=$errorCode"
+    }
+}
+
+private fun describeResultCode(resultCode: Int): String {
+    return when (resultCode) {
+        Activity.RESULT_OK -> "RESULT_OK"
+        SmsManager.RESULT_ERROR_GENERIC_FAILURE -> "RESULT_ERROR_GENERIC_FAILURE(通用失败)"
+        SmsManager.RESULT_ERROR_NO_SERVICE -> "RESULT_ERROR_NO_SERVICE(无服务)"
+        SmsManager.RESULT_ERROR_NULL_PDU -> "RESULT_ERROR_NULL_PDU"
+        SmsManager.RESULT_ERROR_RADIO_OFF -> "RESULT_ERROR_RADIO_OFF(飞行模式/无线电关闭)"
+        else -> "resultCode=$resultCode"
     }
 }
